@@ -1,0 +1,65 @@
+pip install numpy pandas matplotlib scikit-learn tensorflow keras
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.preprocessing import MinMaxScaler
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense, Dropout
+
+# Load your stock price data
+# Replace 'your_data.csv' with the path to your CSV file containing the stock price data
+data = pd.read_csv('your_data.csv')
+
+# Preprocess the data
+scaler = MinMaxScaler(feature_range=(0, 1))
+scaled_data = scaler.fit_transform(data['Close'].values.reshape(-1,1))
+
+# Create the training dataset
+seq_len = 60  # Choose sequence length (number of previous days' data to use for prediction)
+x_train = []
+y_train = []
+for i in range(seq_len, len(data)):
+    x_train.append(scaled_data[i - seq_len:i, 0])
+    y_train.append(scaled_data[i, 0])
+x_train, y_train = np.array(x_train), np.array(y_train)
+
+# Reshape data for LSTM (samples, time steps, features)
+x_train = np.reshape(x_train, (x_train.shape[0], x_train.shape[1], 1))
+
+# Build the LSTM model
+model = Sequential()
+model.add(LSTM(units=50, return_sequences=True, input_shape=(x_train.shape[1], 1)))
+model.add(Dropout(0.2))
+model.add(LSTM(units=50, return_sequences=True))
+model.add(Dropout(0.2))
+model.add(LSTM(units=50))
+model.add(Dropout(0.2))
+model.add(Dense(units=1))
+
+# Compile the model
+model.compile(optimizer='adam', loss='mean_squared_error')
+
+# Train the model
+model.fit(x_train, y_train, epochs=25, batch_size=32)
+
+# Predict the stock price
+# Use the last 'seq_len' days of data from the training set to predict future stock prices
+inputs = scaled_data[-seq_len:].reshape(1, -1)
+x_test = []
+for i in range(seq_len, len(inputs[0])):
+    x_test.append(inputs[0, i - seq_len:i])
+x_test = np.array(x_test)
+x_test = np.reshape(x_test, (x_test.shape[0], x_test.shape[1], 1))
+predicted_stock_price = model.predict(x_test)
+predicted_stock_price = scaler.inverse_transform(predicted_stock_price)
+
+# Visualize the results
+plt.figure(figsize=(16, 8))
+plt.plot(data['Date'], data['Close'], label='Actual Stock Price')
+plt.plot(data['Date'].iloc[-1:], predicted_stock_price, label='Predicted Stock Price', marker='o')
+plt.title('Stock Price Prediction')
+plt.xlabel('Date')
+plt.ylabel('Stock Price')
+plt.legend()
+plt.show()
